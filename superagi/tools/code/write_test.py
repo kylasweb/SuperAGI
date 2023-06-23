@@ -81,10 +81,10 @@ class WriteTestTool(BaseTool):
             token_limit = TokenCounter.token_limit(self.llm.get_model())
             result = self.llm.chat_completion(messages, max_tokens=(token_limit - total_tokens - 100))
 
-            # Extract the code part using regular expression
-            code = re.search(r'(?<=```).*?(?=```)', result["content"], re.DOTALL)
-            if code:
-                code_content = code.group(0).strip()
+            if code := re.search(
+                r'(?<=```).*?(?=```)', result["content"], re.DOTALL
+            ):
+                code_content = code[0].strip()
             else:
                 return "Unable to extract code from the response"
 
