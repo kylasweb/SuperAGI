@@ -10,9 +10,7 @@ from superagi.resource_manager.manager import ResourceManager
 @pytest.fixture
 def resource_manager():
     session_mock = Mock()
-    resource_manager = ResourceManager(session_mock)
-    #resource_manager.agent_id = 1  # replace with actual value
-    return resource_manager
+    return ResourceManager(session_mock)
 
 
 def test_write_binary_file(resource_manager):

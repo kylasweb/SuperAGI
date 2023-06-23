@@ -42,9 +42,7 @@ class AgentExecutor:
         Returns:
             str: The validated filename.
         """
-        if filename.endswith(".py"):
-            return filename[:-3]  # Remove the last three characters (i.e., ".py")
-        return filename
+        return filename[:-3] if filename.endswith(".py") else filename
 
     @staticmethod
     def create_object(class_name, folder_name, file_name):
@@ -68,9 +66,7 @@ class AgentExecutor:
         # Get the class from the loaded module
         obj_class = getattr(module, class_name)
 
-        # Create an instance of the class
-        new_object = obj_class()
-        return new_object
+        return obj_class()
 
     @staticmethod
     def get_model_api_key_from_execution(agent_execution, session):
@@ -94,12 +90,17 @@ class AgentExecutor:
         organisation = session.query(Organisation).filter(Organisation.id == project.organisation_id).first()
         if not organisation:
             raise HTTPException(status_code=404, detail="Organisation not found")
-        config = session.query(Configuration).filter(Configuration.organisation_id == organisation.id,
-                                                     Configuration.key == "model_api_key").first()
-        if not config:
+        if (
+            config := session.query(Configuration)
+            .filter(
+                Configuration.organisation_id == organisation.id,
+                Configuration.key == "model_api_key",
+            )
+            .first()
+        ):
+            return decrypt_data(config.value)
+        else:
             raise HTTPException(status_code=404, detail="Configuration not found")
-        model_api_key = decrypt_data(config.value)
-        return model_api_key
 
     def execute_next_action(self, agent_execution_id):
         """
@@ -122,7 +123,7 @@ class AgentExecutor:
         agent = session.query(Agent).filter(Agent.id == agent_execution.agent_id).first()
         # if agent_execution.status == "PAUSED" or agent_execution.status == "TERMINATED" or agent_execution == "COMPLETED":
         #     return
-        if agent_execution.status != "RUNNING" and agent_execution.status != "WAITING_FOR_PERMISSION":
+        if agent_execution.status not in ["RUNNING", "WAITING_FOR_PERMISSION"]:
             return
 
         if not agent:
@@ -148,12 +149,8 @@ class AgentExecutor:
         model_api_key = AgentExecutor.get_model_api_key_from_execution(agent_execution, session)
 
         try:
-            if parsed_config["LTM_DB"] == "Pinecone":
-                memory = VectorFactory.get_vector_storage("PineCone", "super-agent-index1",
-                                                          OpenAiEmbedding(model_api_key))
-            else:
-                memory = VectorFactory.get_vector_storage("PineCone", "super-agent-index1",
-                                                          OpenAiEmbedding(model_api_key))
+            memory = VectorFactory.get_vector_storage("PineCone", "super-agent-index1",
+                                                      OpenAiEmbedding(model_api_key))
         except:
             logger.info("Unable to setup the pinecone connection...")
             memory = None
@@ -167,7 +164,7 @@ class AgentExecutor:
 
         tools = self.set_default_params_tools(tools, parsed_config, agent_execution.agent_id,
                                               model_api_key=model_api_key, session=session)
-        
+
 
 
         spawned_agent = SuperAgi(ai_name=parsed_config["name"], ai_role=parsed_config["description"],
@@ -226,7 +223,10 @@ class AgentExecutor:
                 tool.goals = parsed_config["goal"]
             if hasattr(tool, 'instructions'):
                 tool.instructions = parsed_config["instruction"]
-            if hasattr(tool, 'llm') and (parsed_config["model"] == "gpt4" or parsed_config["model"] == "gpt-3.5-turbo"):
+            if hasattr(tool, 'llm') and parsed_config["model"] in [
+                "gpt4",
+                "gpt-3.5-turbo",
+            ]:
                 tool.llm = OpenAi(model="gpt-3.5-turbo", api_key=model_api_key, temperature=0.3)
             elif hasattr(tool, 'llm'):
                 tool.llm = OpenAi(model=parsed_config["model"], api_key=model_api_key, temperature=0.3)
@@ -264,8 +264,7 @@ class AgentExecutor:
         if agent_execution_permission.status == "APPROVED":
             result = spawned_agent.handle_tool_response(agent_execution_permission.assistant_reply).get("result")
         else:
-            result = f"User denied the permission to run the tool {agent_execution_permission.tool_name}" \
-                     f"{' and has given the following feedback : ' + agent_execution_permission.user_feedback if agent_execution_permission.user_feedback else ''}"
+            result = f"User denied the permission to run the tool {agent_execution_permission.tool_name}{f' and has given the following feedback : {agent_execution_permission.user_feedback}' if agent_execution_permission.user_feedback else ''}"
 
         agent_execution_feed = AgentExecutionFeed(agent_execution_id=agent_execution_permission.agent_execution_id,
                                                   agent_id=agent_execution_permission.agent_id,

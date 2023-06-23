@@ -60,10 +60,10 @@ def get_tool(
 
     """
 
-    db_tool = db.session.query(Tool).filter(Tool.id == tool_id).first()
-    if not db_tool:
+    if db_tool := db.session.query(Tool).filter(Tool.id == tool_id).first():
+        return db_tool
+    else:
         raise HTTPException(status_code=404, detail="Tool not found")
-    return db_tool
 
 
 @router.put("/update/{tool_id}", response_model=sqlalchemy_to_pydantic(Tool))
@@ -111,5 +111,4 @@ def get_tools(Authorize: AuthJWT = Depends(check_auth)):
 
     """
 
-    db_tools = db.session.query(Tool).all()
-    return db_tools
+    return db.session.query(Tool).all()
